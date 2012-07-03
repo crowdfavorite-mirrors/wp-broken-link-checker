@@ -3,8 +3,8 @@ Contributors: whiteshadow
 Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A6P9S6CE3SRSW
 Tags: links, broken, maintenance, blogroll, custom fields, admin, comments, posts
 Requires at least: 3.2
-Tested up to: 3.3
-Stable tag: 1.4
+Tested up to: 3.4.1
+Stable tag: 1.6.1
 
 This plugin will check your posts, comments and other content for broken links and missing images, and notify you if any are found. 
 
@@ -37,6 +37,7 @@ There are several actions associated with each link. They show up when you move 
 * "Edit URL" lets you change the URL of that link. If the link is present in more than one place (e.g. both in a post and in the blogroll), all occurrences of that URL will be changed.
 * "Unlink" removes the link but leaves the link text intact.
 * "Not broken" lets you manually mark a "broken" link as working. This is useful if you know it was incorrectly detected as broken due to a network glitch or a bug. The marked link will still be checked periodically, but the plugin won't consider it broken unless it gets a new result.
+* "Dismiss" hides the link from the "Broken Links" and "Redirects" views. It will still be checked as normal and get the normal link styles (e.g. a strike-through effect for broken links), but won't be reported again unless its status changes. Useful if you want to acknowledge a link as broken/redirected and just leave as it is.
 
 You can also click on the contents of the "Status" or "Link Text" columns to get more info about the status of each link.
 
@@ -49,7 +50,7 @@ You can also click on the contents of the "Status" or "Link Text" columns to get
 * Czech - [Lelkoun](http://lelkoun.cz/)
 * Danish - [Georg S. Adamsen](http://wordpress.blogos.dk/)
 * Dutch - [Gideon van Melle](http://www.gvmelle.com/)
-* French - [Whiler](http://blogs.wittwer.fr/whiler/)
+* French - [Whiler](http://blogs.wittwer.fr/whiler/), Luc Capronnier
 * German - [Ivan Graf](http://blog.bildergallery.com/)
 * Hindi - [Outshine Solutions](http://outshinesolutions.com/)
 * Irish - [Ray Gren](http://letsbefamous.com/)
@@ -58,10 +59,11 @@ You can also click on the contents of the "Status" or "Link Text" columns to get
 * Korean - [MinHyeong Lim](http://ssamture.net/)
 * Persian - [Omid Sheerkavand](http://qanal.ir/)
 * Polish - [http://positionmaker.pl](http://positionmaker.pl/)
-* Portuguese - [PedroDM](http://development.mowster.net/)
+* Portuguese - [mowster](http://wordpress.mowster.net/)
 * Romanian - [Ovidiu](http://www.jibo.ro)
 * Russian - [Anna Ozeritskaya](http://hweia.ru/)
 * Spanish - [Neoshinji](http://blog.tuayudainformatica.com/traducciones-de-plugins-wordpress/)
+* Turkish - [Murat Durgun](http://www.lanwifi.net/)
 * Ukrainian - [Stas Mykhajlyuk](http://www.kosivart.com/)
 
 *Note: Some translations are not entirely up to date with the latest release, so parts of the interface may appear untranslated.*
@@ -88,6 +90,47 @@ To upgrade your installation
 1. Reactivate the plugin. Your settings will be retained from the previous version.
 
 == Changelog ==
+
+= 1.6.1 =
+* Fixed the "database not up to date" bug. Now the plugin should properly upgrade the DB.
+
+= 1.6 =
+* Added a way to dismiss links. Dismissed links don't show up in the "Broken" and "Redirects" lists, but are still checked as normal and get the normal link styles (e.g. strike-through for broken links). Useful if you want to, for example, acknowledge that a link is broken and leave it be.
+* Added a "Redirect URL" column. For redirects this will display the URL that the link redirects to. For normal, non-redirected links, it will be empty. This column is hidden by default. You can enable it in the "Screen Options" panel.
+* Updated French translation.
+* Tested on WP 3.4.1.
+* Replace the "More plugins..." link on the "Broken Links" page with a link to the Admin Menu Editor page. This link will be hidden for users who have donated.
+* A number of minor fixes.
+
+= 1.5.5 =
+* Fix broken image on the settings page.
+
+= 1.5.3 =
+* Fixed a bug that would cause the donation flag to be recorded incorrectly. Apologies to everyone who donated.
+
+= 1.5.2 =
+* A few minor comment fixes.
+* Move certain styles to a separate CSS file, which is where they belong.
+* Replace the ThemeFuse banner with one from ManageWP (will go live on June 5).
+* Instead of displaying several plugins in the "More plugins by Janis Elsts" box, sometimes display just one plugin (AME).
+
+= 1.5.1 =
+* Updated Portuguese translation.
+* Updated German translation.
+* Fixed the donation link to properly return to the Dashboard upon completion.
+* Do not display ads to users who have donated.
+
+= 1.5 =
+* Added a FileServe checker.
+* Added Turkish translation.
+* Added GoogleVideo and Megavideo embed support.
+* Fixed Megaupload links being reported with an "Unknown error" message when it should be "Not found".
+* Fixed a couple of bugs in the Rapidshare and MediaFire checkers.
+* Updated German translation.
+* Updated Italian translation.
+* Updated Portuguese translation.
+* The explanatory text for the broken link CSS and removed link CSS inputs can now be translated.
+* Tested on WP 3.4-alpha-20291.
 
 = 1.4 =
 * Added an option to send post authors notifications about broken links in their posts.
@@ -284,7 +327,7 @@ To upgrade your installation
 * "Discard" gone, replaced by "Not broken".
 * "Exclude" gone from action links.
 * Better handling of false positives.
-* FTP, mailto:, javascript: and other links with unsupported protocols now show up in the “All links” list.
+* FTP, mailto:, javascript: and other links with unsupported protocols now show up in the ï¿½All linksï¿½ list.
 
 = 0.8.1 =
 * Updated Italian translation.
@@ -431,7 +474,7 @@ To upgrade your installation
 
 = 0.5 =
 * This is a near-complete rewrite with a lot of new features. 
-* See  http://w-shadow.com/blog/2009/05/22/broken-link-checker-05/ for details.
+* See ï¿½http://w-shadow.com/blog/2009/05/22/broken-link-checker-05/ for details.
 
 = 0.4.14 =
 * Fix false positives when the URL contains an #anchor
