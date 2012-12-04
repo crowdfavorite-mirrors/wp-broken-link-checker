@@ -4,7 +4,7 @@ Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_i
 Tags: links, broken, maintenance, blogroll, custom fields, admin, comments, posts
 Requires at least: 3.2
 Tested up to: 3.4.1
-Stable tag: 1.6.1
+Stable tag: 1.6.2
 
 This plugin will check your posts, comments and other content for broken links and missing images, and notify you if any are found. 
 
@@ -90,6 +90,9 @@ To upgrade your installation
 1. Reactivate the plugin. Your settings will be retained from the previous version.
 
 == Changelog ==
+
+= 1.6.2 =
+* Another attempt to fix the "database not up to date" that some users are still experiencing even with 1.6.1.
 
 = 1.6.1 =
 * Fixed the "database not up to date" bug. Now the plugin should properly upgrade the DB.
@@ -601,6 +604,9 @@ To upgrade your installation
 * *There are no release notes for this version*
 
 == Upgrade Notice ==
+
+= 1.6.2 =
+Attempts to fix the "database not up to date" bug that some users are still experiencing with 1.6.1. If you have not encountered this bug, you can skip this update.
 
 = 1.4 =
 Adds an option to send post authors notifications about broken links in their posts and the the ability to sort links by URL, as well as a number of other updates and fixes.
