@@ -331,37 +331,6 @@ class wsBrokenLinkChecker {
         	array($options_page_hook, $links_page_hook)
 		);
 
-		//Add a link to the Admin Menu Editor site to the "Broken Links" page.
-        if ( !$this->conf->get('user_has_donated') ) {
-			//Choose anchor text randomly.
-	        $possible_anchor_texts = array(
-				'Organize WordPress admin menu',
-				'Simplify WordPress Admin Menu',
-				'Customize WP Admin Menu',
-				'Organize WP Admin: use Admin Menu Editor',
-				'Web Developer? Check out Admin Menu Editor',
-				'Admin Menu Editor for WP',
-				'Organize, Hide And Customize Admin Menus',
-	        );
-			$index = $this->conf->get('view-broken-links-meta-ad', null);
-			if ( $index === null ) {
-				$index = rand(0, count($possible_anchor_texts) - 1);
-				$this->conf->set('view-broken-links-meta-ad', $index);
-				$this->conf->save_options();
-			}
-
-	        add_screen_meta_link(
-	            'blc-more-plugins-link',
-				$possible_anchor_texts[$index],
-				sprintf(
-					'http://w-shadow.com/admin-menu-editor-pro/?utm_source=broken_link_checker&utm_medium=Broken_Links_meta_link&utm_campaign=Plugins&utm_content=copy-a%s',
-					urlencode($index)
-				),
-				$links_page_hook,
-				array('style' => 'font-weight: bold;')
-			);
-        }
-
 	    //Make the Settings page link to the link list
 		add_screen_meta_link(
         	'blc-links-page-link',
@@ -372,7 +341,7 @@ class wsBrokenLinkChecker {
 		);
 		
 		//Add a link to the latest blog post/whatever about this plugin, if any.
-		if ( isset($this->conf->options['plugin_news']) && !empty($this->conf->options['plugin_news']) ){
+		if ( !$this->conf->get('user_has_donated') && isset($this->conf->options['plugin_news']) && !empty($this->conf->options['plugin_news']) ){
 			$news = $this->conf->options['plugin_news'];
 	        add_screen_meta_link(
 	        	'blc-plugin-news-link',
@@ -402,8 +371,6 @@ class wsBrokenLinkChecker {
     	global $blclog;
 
     	$moduleManager = blcModuleManager::getInstance();
-
-		$this->ensure_database_validity();
 
 	    //Prior to 1.5.2 (released 2012-05-27), there was a bug that would cause the donation flag to be
 	    //set incorrectly. So we'll unset the flag in that case.
@@ -1183,7 +1150,7 @@ class wsBrokenLinkChecker {
      * @return void
      */
     function options_page_css(){
-    	wp_enqueue_style('blc-options-page', plugins_url('css/options-page.css', BLC_PLUGIN_FILE), array(), '20120527' );
+    	wp_enqueue_style('blc-options-page', plugins_url('css/options-page.css', BLC_PLUGIN_FILE), array(), '20121206' );
     	wp_enqueue_style('dashboard');
 	}
 	
@@ -1197,8 +1164,6 @@ class wsBrokenLinkChecker {
         global $wpdb, $blclog; /* @var wpdb $wpdb */
         
         $blc_link_query = blcLinkQuery::getInstance();
-
-		$this->ensure_database_validity();
 
 		//Cull invalid and missing modules so that we don't get dummy links/instances showing up.
         $moduleManager = blcModuleManager::getInstance();
@@ -1343,33 +1308,6 @@ class wsBrokenLinkChecker {
 		
 		?></div><?php
     }
-
-	/**
-	 * Ensure that the plugin's database is at the required version.
-	 *
-	 * @param bool $upgradeOnFailure If true, will attempt to upgrade the DB is out of date.
-	 * @param bool $silent Output nothing
-	 * @return bool
-	 */
-	private function ensure_database_validity($upgradeOnFailure = true, $silent = false) {
-		//Sanity check : Make sure the plugin's tables are all set up.
-		if ( $this->db_version != $this->conf->options['current_db_version'] ) {
-			if ( $upgradeOnFailure ) {
-				require_once BLC_DIRECTORY . '/includes/admin/db-upgrade.php';
-				blcDatabaseUpgrader::upgrade_database();
-				return $this->ensure_database_validity(false, $silent);
-			} else if ( !$silent ) {
-				printf(
-					__("Error: The plugin's database tables are not up to date! (Current version : %d, expected : %d)", 'broken-link-checker'),
-					$this->conf->options['current_db_version'],
-					$this->db_version
-				);
-				echo '<br>', __('Try deactivating and then reactivating the plugin.', 'broken-link-checker');
-			}
-			return false;
-		}
-		return true;
-	}
     
   /**
    * Create a custom link filter using params passed in $_POST.
@@ -1900,7 +1838,7 @@ class wsBrokenLinkChecker {
 	 * @return void
 	 */
 	function links_page_css(){
-		wp_enqueue_style('blc-links-page', plugins_url('css/links-page.css', $this->loader), array(), '20120702');
+		wp_enqueue_style('blc-links-page', plugins_url('css/links-page.css', $this->loader), array(), '20121106');
 	}
 	
 	/**
@@ -2027,12 +1965,6 @@ class wsBrokenLinkChecker {
    */
 	function work(){
 		global $wpdb;
-		
-		//Sanity check : make sure the DB is all set up 
-    	if ( !$this->ensure_database_validity(true, false) ) {
-    		//FB::error("The plugin's database tables are not up to date! Stop.");
-			return;
-		}
 		
 		if ( !$this->acquire_lock() ){
 			//FB::warn("Another instance of BLC is already working. Stop.");
@@ -2355,16 +2287,27 @@ class wsBrokenLinkChecker {
 		
 		$text .= "<br/>";
 		if ( $status['known_links'] > 0 ){
-			$text .= sprintf( 
-				_n('Detected %d unique URL', 'Detected %d unique URLs', $status['known_links'], 'broken-link-checker') .
-					' ' . _n('in %d link', 'in %d links', $status['known_instances'], 'broken-link-checker'),
-				$status['known_links'],
+			$url_count = sprintf(
+				_nx('%d unique URL', '%d unique URLs', $status['known_links'], 'for the "Detected X unique URLs in Y links" message', 'broken-link-checker'),
+				$status['known_links']
+			);
+			$link_count = sprintf(
+				_nx('%d link', '%d links', $status['known_instances'], 'for the "Detected X unique URLs in Y links" message', 'broken-link-checker'),
 				$status['known_instances']
-			 );
+			);
+
 			if ($this->conf->options['need_resynch']){
-				$text .= ' ' . __('and still searching...', 'broken-link-checker');
+				$text .= sprintf(
+					__('Detected %1$s in %2$s and still searching...', 'broken-link-checker'),
+					$url_count,
+					$link_count
+				);
 			} else {
-				$text .= '.';
+				$text .= sprintf(
+					__('Detected %1$s in %2$s.', 'broken-link-checker'),
+					$url_count,
+					$link_count
+				);
 			}
 		} else {
 			if ($this->conf->options['need_resynch']){
