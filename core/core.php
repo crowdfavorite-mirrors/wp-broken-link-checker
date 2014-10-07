@@ -90,9 +90,9 @@ class wsBrokenLinkChecker {
 		add_screen_options_panel(
 			'blc-screen-options',
 			'',
-			array(&$this, 'screen_options_html'),
+			array($this, 'screen_options_html'),
 			'tools_page_view-broken-links',
-			array(&$this, 'ajax_save_screen_options'),
+			array($this, 'ajax_save_screen_options'),
 			true
 		);
     }
@@ -398,6 +398,11 @@ class wsBrokenLinkChecker {
         
         if(isset($_POST['submit'])) {
 			check_admin_referer('link-checker-options');
+
+			$cleanPost = $_POST;
+			if ( function_exists('wp_magic_quotes') ){
+				$cleanPost = stripslashes_deep($cleanPost); //Ceterum censeo, WP shouldn't mangle superglobals.
+			}
 			
 			//Activate/deactivate modules
 			if ( !empty($_POST['module']) ){
@@ -417,6 +422,7 @@ class wsBrokenLinkChecker {
 				$enabled_post_statuses = array('publish');
 			}
 			$this->conf->options['enabled_post_statuses'] = $enabled_post_statuses;
+			//TODO: Resynch enabled post types when enabled statuses change.
 			
 			//The execution time limit must be above zero
             $new_execution_time = intval($_POST['max_execution_time']);
@@ -431,11 +437,11 @@ class wsBrokenLinkChecker {
             }
             
             $this->conf->options['mark_broken_links'] = !empty($_POST['mark_broken_links']);
-            $new_broken_link_css = trim($_POST['broken_link_css']);
+            $new_broken_link_css = trim($cleanPost['broken_link_css']);
             $this->conf->options['broken_link_css'] = $new_broken_link_css;
             
             $this->conf->options['mark_removed_links'] = !empty($_POST['mark_removed_links']);
-            $new_removed_link_css = trim($_POST['removed_link_css']);
+            $new_removed_link_css = trim($cleanPost['removed_link_css']);
             $this->conf->options['removed_link_css'] = $new_removed_link_css;
             
             $this->conf->options['nofollow_broken_links'] = !empty($_POST['nofollow_broken_links']);
@@ -476,6 +482,13 @@ class wsBrokenLinkChecker {
 				
 				$this->conf->options['enable_load_limit'] = $this->conf->options['server_load_limit'] > 0;
             }
+
+			//Target resource usage (1% to 100%)
+			if ( isset($_POST['target_resource_usage']) ) {
+				$usage = floatval($_POST['target_resource_usage']);
+				$usage = max(min($usage / 100, 1), 0.01);
+				$this->conf->options['target_resource_usage'] = $usage;
+			}
             
             //When to run the checker
             $this->conf->options['run_in_dashboard'] = !empty($_POST['run_in_dashboard']);
@@ -509,6 +522,40 @@ class wsBrokenLinkChecker {
 	        if ( !empty($widget_cap) ) {
 		        $this->conf->options['dashboard_widget_capability'] = $widget_cap;
 	        }
+
+			//Logging. The plugin can log various events and results for debugging purposes.
+			$this->conf->options['logging_enabled'] = !empty($_POST['logging_enabled']);
+			$this->conf->options['custom_log_file_enabled'] = !empty($_POST['custom_log_file_enabled']);
+
+			if ( $this->conf->options['logging_enabled'] ) {
+				if ( $this->conf->options['custom_log_file_enabled'] ) {
+					$log_file = strval($cleanPost['log_file']);
+				} else {
+					//Default log file is /wp-content/uploads/broken-link-checker/blc-log.txt
+					$log_directory = self::get_default_log_directory();
+					$log_file = $log_directory . '/' . self::get_default_log_basename();
+
+					//Attempt to create the log directory.
+					if ( !is_dir($log_directory) ) {
+						if ( mkdir($log_directory, 0750) ) {
+							//Add a .htaccess to hide the log file from site visitors.
+							file_put_contents($log_directory . '/.htaccess', 'Deny from all');
+						}
+					}
+				}
+
+				$this->conf->options['log_file'] = $log_file;
+
+				//Attempt to create the log file if not already there.
+				if ( !is_file($log_file) ) {
+					file_put_contents($log_file, '');
+				}
+
+				//The log file must be writable.
+				if ( !is_writable($log_file) || !is_file($log_file) ) {
+					$this->conf->options['logging_enabled'] = false;
+				}
+			}
 
 			//Make settings that affect our Cron events take effect immediately
 			$this->setup_cron_events();
@@ -1020,7 +1067,7 @@ class wsBrokenLinkChecker {
 		
 		$load = blcUtility::get_server_load();
 		$available = !empty($load);
-		
+
 		if ( $available ){
 			$value = !empty($this->conf->options['server_load_limit'])?sprintf('%.2f', $this->conf->options['server_load_limit']):'';
 			printf(
@@ -1051,6 +1098,72 @@ class wsBrokenLinkChecker {
 		?> 
         </td>
         </tr>
+
+		<tr valign="top">
+			<th scope="row"><?php _e('Target resource usage', 'broken-link-checker'); ?></th>
+			<td>
+				<?php
+				$target_resource_usage = $this->conf->get('target_resource_usage', 0.25);
+				printf(
+					'<input name="target_resource_usage" value="%d"
+						type="range" min="1" max="100" id="target_resource_usage">',
+					$target_resource_usage * 100
+				);
+				?>
+
+				<span id="target_resource_usage_percent"><?php
+					echo sprintf('%.0f%%', $target_resource_usage * 100);
+				?></span>
+			</td>
+		</tr>
+
+		<tr valign="top">
+			<th scope="row"><?php _e('Logging', 'broken-link-checker'); ?></th>
+			<td>
+				<p>
+					<label for='logging_enabled'>
+						<input type="checkbox" name="logging_enabled" id="logging_enabled"
+							<?php checked($this->conf->options['logging_enabled']); ?>/>
+						<?php _e('Enable logging', 'broken-link-checker'); ?>
+					</label>
+				</p>
+			</td>
+		</tr>
+
+		<tr valign="top">
+			<th scope="row"><?php _e('Log file location', 'broken-link-checker'); ?></th>
+			<td>
+
+				<div id="blc-logging-options">
+
+				<p>
+				<label>
+					<input type="radio" name="custom_log_file_enabled" value=""
+						<?php checked(!$this->conf->options['custom_log_file_enabled']); ?>>
+					<?php echo _x('Default', 'log file location', 'broken-link-checker'); ?>
+				</label>
+				<br>
+					<span class="description">
+						<code><?php
+							echo self::get_default_log_directory(), '/', self::get_default_log_basename();
+						?></code>
+					</span>
+				</p>
+
+				<p>
+				<label>
+					<input type="radio" name="custom_log_file_enabled" value="1"
+						<?php checked($this->conf->options['custom_log_file_enabled']); ?>>
+					<?php echo _x('Custom', 'log file location', 'broken-link-checker'); ?>
+				</label>
+				<br><input type="text" name="log_file" id="log_file" size="90"
+						   value="<?php echo esc_attr($this->conf->options['log_file']); ?>">
+				</p>
+
+				</div>
+			</td>
+		</tr>
+
         
         <tr valign="top">
         <th scope="row"><?php _e('Forced recheck', 'broken-link-checker'); ?></th>
@@ -1223,7 +1336,7 @@ class wsBrokenLinkChecker {
      * @return void
      */
     function options_page_css(){
-    	wp_enqueue_style('blc-options-page', plugins_url('css/options-page.css', BLC_PLUGIN_FILE), array(), '20131216');
+    	wp_enqueue_style('blc-options-page', plugins_url('css/options-page.css', BLC_PLUGIN_FILE), array(), '20140818');
     	wp_enqueue_style('dashboard');
 	}
 	
@@ -2073,20 +2186,23 @@ class wsBrokenLinkChecker {
    * @return void
    */
 	function work(){
-		global $wpdb;
+		global $wpdb, $blclog;
 		
 		if ( !$this->acquire_lock() ){
 			//FB::warn("Another instance of BLC is already working. Stop.");
+			$blclog->info('Another instance of BLC is already working. Stop.');
 			return;
 		}
 		
 		if ( $this->server_too_busy() ){
 			//FB::warn("Server is too busy. Stop.");
+			$blclog->warn('Server load is too high, stopping.');
 			return;
 		}
 		
 		$this->start_timer();
-		
+		$blclog->info('work() starts');
+
 		$max_execution_time = $this->conf->options['max_execution_time'];
 	
 		/*****************************************
@@ -2107,8 +2223,7 @@ class wsBrokenLinkChecker {
 		ignore_user_abort( true );
 		
 		//Close the connection as per http://www.php.net/manual/en/features.connection-handling.php#71172
-		//This reduces resource usage and may solve the mysterious slowdowns certain users have 
-		//encountered when activating the plugin.
+		//This reduces resource usage.
 		//(Disable when debugging or you won't get the FirePHP output)
 		if ( !headers_sent() && (!defined('BLC_DEBUG') || !constant('BLC_DEBUG')) ){
 			@ob_end_clean(); //Discard the existing buffer, if any
@@ -2124,6 +2239,10 @@ class wsBrokenLinkChecker {
  		//Load modules for this context
  		$moduleManager = blcModuleManager::getInstance();
  		$moduleManager->load_modules('work');
+
+		$target_usage_fraction = $this->conf->get('target_resource_usage', 0.25);
+		//Target usage must be between 1% and 100%.
+		$target_usage_fraction = max(min($target_usage_fraction, 1), 0.01);
  		
  		
 		/*****************************************
@@ -2134,19 +2253,35 @@ class wsBrokenLinkChecker {
 		$still_need_resynch = $this->conf->options['need_resynch'];
 		
 		if ( $still_need_resynch ) {
-			
+
 			//FB::log("Looking for containers that need parsing...");
-			
-			while( $containers = blcContainerHelper::get_unsynched_containers(50) ){
+			$max_containers_per_query = 50;
+
+			$start = microtime(true);
+			$containers = blcContainerHelper::get_unsynched_containers($max_containers_per_query);
+			$get_containers_time = microtime(true) - $start;
+
+			while( !empty($containers) ){
 				//FB::log($containers, 'Found containers');
+				$this->sleep_to_maintain_ratio($get_containers_time, $target_usage_fraction);
 				
 				foreach($containers as $container){
+					$synch_start_time = microtime(true);
+
 					//FB::log($container, "Parsing container");
 					$container->synch();
+
+					$synch_elapsed_time = microtime(true) - $synch_start_time;
+					$blclog->info(sprintf(
+						'Parsed container %s[%s] in %.2f ms',
+						$container->container_type,
+						$container->container_id,
+						$synch_elapsed_time * 1000
+					));
 					
 					//Check if we still have some execution time left
 					if( $this->execution_time() > $max_execution_time ){
-						//FB::log('The alloted execution time has run out');
+						//FB::log('The allotted execution time has run out');
 						blc_cleanup_links();
 						$this->release_lock();
 						return;
@@ -2159,8 +2294,16 @@ class wsBrokenLinkChecker {
 						$this->release_lock();
 						return;
 					}
+
+					//Intentionally slow down parsing to reduce the load on the server. Basically,
+					//we work $target_usage_fraction of the time and sleep the rest of the time.
+					$this->sleep_to_maintain_ratio($synch_elapsed_time, $target_usage_fraction);
 				}
 				$orphans_possible = true;
+
+				$start = microtime(true);
+				$containers = blcContainerHelper::get_unsynched_containers($max_containers_per_query);
+				$get_containers_time = microtime(true) - $start;
 			}
 			
 			//FB::log('No unparsed items found.');
@@ -2183,19 +2326,26 @@ class wsBrokenLinkChecker {
 		*******************************************/
 		
 		if ( $orphans_possible ) {
-			//FB::log('Cleaning up the link table.');
+			$start = microtime(true);
+
+			$blclog->info('Removing orphaned links.');
 			blc_cleanup_links();
+
+			$get_links_time = microtime(true) - $start;
+			$this->sleep_to_maintain_ratio($get_links_time, $target_usage_fraction);
 		}
 		
 		//Check if we still have some execution time left
 		if( $this->execution_time() > $max_execution_time ){
 			//FB::log('The allotted execution time has run out');
+			$blclog->info('The allotted execution time has run out.');
 			$this->release_lock();
 			return;
 		}
 		
 		if ( $this->server_too_busy() ){
 			//FB::log('Server overloaded, bailing out.');
+			$blclog->info('Server load too high, stopping.');
 			$this->release_lock();
 			return;
 		}
@@ -2203,14 +2353,25 @@ class wsBrokenLinkChecker {
 		/*****************************************
 						Check links
 		******************************************/
-		while ( $links = $this->get_links_to_check(30) ){
+		$max_links_per_query = 30;
+
+		$start = microtime(true);
+		$links = $this->get_links_to_check($max_links_per_query);
+		$get_links_time = microtime(true) - $start;
+
+		while ( $links ){
+			$this->sleep_to_maintain_ratio($get_links_time, $target_usage_fraction);
 		
 			//Some unchecked links found
 			//FB::log("Checking ".count($links)." link(s)");
+			$blclog->info("Checking ".count($links)." link(s)");
+
+			//Randomizing the array reduces the chances that we'll get several links to the same domain in a row.
+			shuffle($links);
 			
 			foreach ($links as $link) {
 				//Does this link need to be checked? Excluded links aren't checked, but their URLs are still
-				//tested periodically to see if they're still on the exlusion list.
+				//tested periodically to see if they're still on the exclusion list.
         		if ( !$this->is_excluded( $link->url ) ) {
         			//Check the link.
         			//FB::log($link->url, "Checking link {$link->link_id}");
@@ -2223,7 +2384,8 @@ class wsBrokenLinkChecker {
 				
 				//Check if we still have some execution time left
 				if( $this->execution_time() > $max_execution_time ){
-					//FB::log('The alloted execution time has run out');
+					//FB::log('The allotted execution time has run out');
+					$blclog->info('The allotted execution time has run out.');
 					$this->release_lock();
 					return;
 				}
@@ -2231,16 +2393,46 @@ class wsBrokenLinkChecker {
 				//Check if the server isn't overloaded
 				if ( $this->server_too_busy() ){
 					//FB::log('Server overloaded, bailing out.');
+					$blclog->info('Server load too high, stopping.');
 					$this->release_lock();
 					return;
 				}
 			}
-			
+
+			$start = microtime(true);
+			$links = $this->get_links_to_check($max_links_per_query);
+			$get_links_time = microtime(true) - $start;
 		}
 		//FB::log('No links need to be checked right now.');
 		
 		$this->release_lock();
+		$blclog->info('work(): All done.');
 		//FB::log('All done.');
+	}
+
+	/**
+	 * Sleep long enough to maintain the required $ratio between $elapsed_time and total runtime.
+	 *
+	 * For example, if $ratio is 0.25 and $elapsed_time is 1 second, this method will sleep for 3 seconds.
+	 * Total runtime = 1 + 3 = 4, ratio = 1 / 4 = 0.25.
+	 *
+	 * @param float $elapsed_time
+	 * @param float $ratio
+	 */
+	private function sleep_to_maintain_ratio($elapsed_time, $ratio) {
+		if ( ($ratio <= 0) || ($ratio > 1) ) {
+			return;
+		}
+		$sleep_time = $elapsed_time * ((1 / $ratio) - 1);
+		if ($sleep_time > 0.0001) {
+			/*global $blclog;
+			$blclog->debug(sprintf(
+				'Task took %.2f ms, sleeping for %.2f ms',
+				$elapsed_time * 1000,
+				$sleep_time * 1000
+			));*/
+			usleep($sleep_time * 1000000);
+		}
 	}
 	
   /**
@@ -2263,7 +2455,7 @@ class wsBrokenLinkChecker {
    * @return int|blcLink[]
    */
 	function get_links_to_check($max_results = 0, $count_only = false){
-		global $wpdb; /* @var wpdb $wpdb */
+		global $wpdb, $blclog; /* @var wpdb $wpdb */
 		
 		$check_threshold = date('Y-m-d H:i:s', strtotime('-'.$this->conf->options['check_threshold'].' hours'));
 		$recheck_threshold = date('Y-m-d H:i:s', time() - $this->conf->options['recheck_threshold']);
@@ -2324,6 +2516,7 @@ class wsBrokenLinkChecker {
 			$recheck_threshold
 		);
 		//FB::log($link_q, "Find links to check");
+		//$blclog->debug("Find links to check: \n" . $link_q);
 	
 		//If we just need the number of links, retrieve it and return
 		if ( $count_only ){
@@ -2767,7 +2960,7 @@ class wsBrokenLinkChecker {
    * @return bool
    */
 	function server_too_busy(){
-		if ( !$this->conf->options['enable_load_limit'] ){
+		if ( !$this->conf->options['enable_load_limit'] || !isset($this->conf->options['server_load_limit']) ){
 			return false;
 		}
 		
@@ -3122,7 +3315,11 @@ class wsBrokenLinkChecker {
 		//Need to override the default 'text/plain' content type to send a HTML email.
 		add_filter('wp_mail_content_type', array(&$this, 'override_mail_content_type'));
 
-		$success = wp_mail($email_address, $subject, $body);
+		//Let auto-responders and similar software know this is an auto-generated email
+		//that they shouldn't respond to.
+		$headers = array('Auto-Submitted: auto-generated');
+
+		$success = wp_mail($email_address, $subject, $body, $headers);
 
 		//Remove the override so that it doesn't interfere with other plugins that might
 		//want to send normal plaintext emails.
@@ -3259,9 +3456,16 @@ class wsBrokenLinkChecker {
 			$this->conf->save_options();
 		}		
 	}
-	
+
+	protected static function get_default_log_directory() {
+		$uploads = wp_upload_dir();
+		return $uploads['basedir'] . '/broken-link-checker';
+	}
+
+	protected static function get_default_log_basename() {
+		return 'blc-log.txt';
+	}
+
 }//class ends here
 
 } // if class_exists...
-
-?>
